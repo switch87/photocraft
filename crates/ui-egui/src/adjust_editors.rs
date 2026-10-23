@@ -360,16 +360,26 @@ const CURVE_GRAPH_PADDING: f32 = 5.0;
 /// The room left on screen for the Curves dialog's other rows (title, channel and mode, Input and
 /// Output, eyedroppers, buttons) when its graph is as tall as it can be.
 const CURVES_CHROME: f32 = 360.0;
+/// The room the Properties panel's Curves editor needs under its graph (the axis strip, Input and
+/// Output) when the panel doesn't scroll.
+const CURVES_BELOW: f32 = 90.0;
 /// The smallest and the default largest side of the Curves graph: 300 points was the fixed
 /// size until #8984.
 const CURVE_SIDE: (f32, f32) = (120.0, 300.0);
 
 /// The Curves graph's side (#8984): the width it is given, in the Properties panel and in the
-/// resizable dialog, and no taller than the window leaves room for beside the other rows.
-fn curve_side(ui: &egui::Ui) -> f32 {
-    let tallest = curve_side_max(ui.ctx());
+/// resizable dialog, and no taller than the window leaves room for beside the other rows. In a
+/// panel that doesn't scroll (a short floating Properties panel) it also keeps to the height left
+/// in the panel; a scrolling panel scrolls to it, and the dialog grows to fit it.
+pub(crate) fn curve_side(ui: &egui::Ui, dialog: bool) -> f32 {
+    let mut tallest = curve_side_max(ui.ctx());
+    let below = ui.available_height() - CURVES_BELOW;
+    let scrolls = ui.stack().iter().any(|frame| frame.kind() == Some(egui::UiKind::ScrollArea));
+    if !dialog && !scrolls && below.is_finite() {
+        tallest = tallest.min(below.max(CURVE_SIDE.0));
+    }
     let width = ui.available_width();
-    if width.is_finite() { width.clamp(CURVE_SIDE.0, tallest) } else { CURVE_SIDE.1 }
+    if width.is_finite() { width.clamp(CURVE_SIDE.0, tallest.max(CURVE_SIDE.0)) } else { CURVE_SIDE.1.min(tallest) }
 }
 
 /// The largest the Curves graph gets in this window: as tall as the window leaves room for beside
@@ -482,7 +492,7 @@ fn curves(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let pencil = v.get("pencil").and_then(Value::as_bool).unwrap_or(false);
     let mut pts = read_curve(v, key);
     let mut map = read_map(v, key);
-    let side = curve_side(ui);
+    let side = curve_side(ui, cx.dialog);
     ui.add_space(4.0);
     let (full, resp) = ui.allocate_exact_size(vec2(side, side + 14.0), Sense::click_and_drag());
     let graph = curve_graph(full, side);

@@ -217,7 +217,8 @@ fn curves_graph_grows_with_the_properties_panel() {
     crate::panels::request_dock_width(&h.ctx, 760.0);
     h.run_steps(8);
     let wide = curves_graph(&h, id);
-    // 760 points of panel, but the 900-point window leaves room for 540 beside the other rows.
+    // 760 points of panel, but the 900-point window leaves room for 540 beside the other rows;
+    // the docked panel scrolls to the rest.
     assert!(wide.width() > narrow.width() + 250.0 && wide.height() <= 900.0 - 360.0, "{narrow:?} → {wide:?}");
     assert!((wide.width() - wide.height()).abs() < 1.0, "square: {wide:?}");
     // A point added at the graph's centre lands at 128, 128 of the curve.
@@ -225,6 +226,31 @@ fn curves_graph_grows_with_the_properties_panel() {
     let c = curve_of(&layer(&h).1);
     assert_eq!(c.len(), 3, "{c:?}");
     assert!((c[1][0] - 127.5).abs() < 2.0 && (c[1][1] - 127.5).abs() < 2.0, "{c:?}");
+}
+
+/// #8984 review: in a panel that doesn't scroll, the graph keeps to the height left under it; the
+/// dialog grows to fit the graph instead, so there only the window limits it.
+#[test]
+fn curves_graph_keeps_to_a_short_panels_height_but_not_the_dialogs() {
+    // A 300-point-high panel in a 900-point window: `scroll` puts it in a scroll area.
+    let side = |dialog: bool, scroll: bool| {
+        let out = std::rc::Rc::new(std::cell::Cell::new(0.0));
+        let seen = out.clone();
+        let mut h = Harness::builder().with_size(vec2(800.0, 900.0)).build_ui(move |ui| {
+            let measure = |ui: &mut egui::Ui| seen.set(crate::adjust_editors::curve_side(ui, dialog));
+            if scroll {
+                egui::ScrollArea::vertical().max_height(300.0).show(ui, measure);
+            } else {
+                ui.allocate_ui(vec2(800.0, 300.0), measure);
+            }
+        });
+        h.run();
+        out.get()
+    };
+    let panel = side(false, false);
+    assert!((120.0..220.0).contains(&panel), "the panel's height: {panel}");
+    assert!((side(true, false) - 540.0).abs() < 1.0, "the dialog grows to fit: only the window limits it");
+    assert!((side(false, true) - 540.0).abs() < 1.0, "a scrolling panel scrolls to it");
 }
 
 /// Issue #43: pressing on a point selects it (no new point), Delete/Backspace and ⌘/Ctrl-click
